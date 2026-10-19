@@ -7,3 +7,4 @@ spool.jsonl
 plate_reader_out/
 certs/
 screening_run/
+.streamlit/secrets.toml

@@ -22,6 +22,7 @@ pytest -q
 - `app/security.py`, `app/keys.py`: API keys, roles, key CLI
 - `app/plates.py`: plates, wells, bulk readings, workflow events (see `docs/06-plates.md`)
 - `screening/`, `adapters/plate_files.py`: simulated weekly drug screen (see `docs/07-screening.md`)
+- `dashboard/`: Streamlit dashboard, read-only (see `docs/08-dashboard.md`)
 - `deploy/`, `Dockerfile`, `docker-compose.yml`: certificates and LAN deployment
 - `app/db.py`: connection per request (a FastAPI dependency)
 - `app/models.py`: request/response shapes + validation (Pydantic)
