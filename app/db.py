@@ -15,7 +15,9 @@ def get_conn():
     # single-statement writes, and it means a request never holds a write lock while the audit
     # middleware (which runs after the handler) writes its own row. For multi-statement
     # transactions, wrap them in explicit BEGIN/COMMIT.
-    conn = sqlite3.connect(db_path(), isolation_level=None)
+    # check_same_thread=False: FastAPI may set up this dependency in one worker thread and run the handler
+    # in another. The connection belongs to one request only, so it is never used by two threads at once.
+    conn = sqlite3.connect(db_path(), isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     try:

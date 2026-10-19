@@ -29,17 +29,19 @@ class LabApi:
 
 
 def connect() -> LabApi:
-    """Settings come from .streamlit/secrets.toml (LAB_API_URL, LAB_API_KEY, optional LAB_CA_CERT),
-    or from environment variables of the same names."""
+    """Settings come from environment variables (LAB_API_URL, LAB_API_KEY, optional LAB_CA_CERT),
+    else from .streamlit/secrets.toml."""
     import streamlit as st
 
     def setting(name: str, default: str | None = None) -> str | None:
+        if name in os.environ:  # environment wins, so a one-off run can override the secrets file
+            return os.environ[name]
         try:
             if name in st.secrets:
                 return st.secrets[name]
         except Exception:  # no secrets file at all
             pass
-        return os.environ.get(name, default)
+        return default
 
     key = setting("LAB_API_KEY")
     if not key:
