@@ -56,3 +56,48 @@ CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
 BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+
+-- Plate-based experiments (e.g. a 384-well drug screen) -------------------------------------------
+CREATE TABLE IF NOT EXISTS plates (
+    id          INTEGER PRIMARY KEY,
+    barcode     TEXT NOT NULL UNIQUE,
+    experiment  TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+-- What was put in each well. One row per well that is used.
+CREATE TABLE IF NOT EXISTS wells (
+    plate_id    INTEGER NOT NULL REFERENCES plates(id) ON DELETE RESTRICT,
+    well        TEXT NOT NULL,              -- 'A01' .. 'P24' on a 384-well plate
+    role        TEXT NOT NULL CHECK (role IN ('drug','vehicle','kill','blank')),
+    drug        TEXT,                       -- only for role = 'drug'
+    conc_um     REAL,                       -- micromolar, only for role = 'drug'
+    PRIMARY KEY (plate_id, well)
+);
+
+-- One measured value for one well: e.g. confluence of A01 on day 3 from the microscope.
+CREATE TABLE IF NOT EXISTS readings (
+    id          INTEGER PRIMARY KEY,
+    plate_id    INTEGER NOT NULL,
+    well        TEXT NOT NULL,
+    device_id   INTEGER NOT NULL REFERENCES devices(id) ON DELETE RESTRICT,
+    day         INTEGER NOT NULL,           -- experiment day, 0 = seeding day
+    metric      TEXT NOT NULL,              -- 'confluence_pct', 'cell_count', 'luminescence'
+    value       REAL NOT NULL,
+    measured_at TEXT NOT NULL,
+    external_id TEXT NOT NULL UNIQUE,       -- batch_id:well, so resending a batch is harmless
+    FOREIGN KEY (plate_id, well) REFERENCES wells(plate_id, well) ON DELETE RESTRICT
+);
+CREATE INDEX IF NOT EXISTS idx_readings_plate ON readings(plate_id, metric, day);
+
+-- Workflow steps that are not measurements: robot moves, dispenses, incubator in/out.
+CREATE TABLE IF NOT EXISTS events (
+    id          INTEGER PRIMARY KEY,
+    plate_id    INTEGER REFERENCES plates(id) ON DELETE RESTRICT,
+    device_id   INTEGER REFERENCES devices(id) ON DELETE RESTRICT,
+    kind        TEXT NOT NULL,              -- 'move', 'seed', 'add_drug', 'image', 'read'
+    detail      TEXT NOT NULL DEFAULT '{}', -- JSON
+    ts          TEXT NOT NULL,
+    external_id TEXT UNIQUE
+);
+CREATE INDEX IF NOT EXISTS idx_events_plate ON events(plate_id, ts);

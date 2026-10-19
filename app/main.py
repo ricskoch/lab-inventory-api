@@ -7,6 +7,7 @@ import sqlite3 as _sqlite3
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 
 from .db import db_path, get_conn, init_db
+from .plates import router as plates_router
 from .security import require
 from .models import Device, DeviceIn, Run, RunIn, Sample, SampleIn, SampleUpdate
 
@@ -18,6 +19,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Lab Inventory API", version="0.1.0", lifespan=lifespan)
+app.include_router(plates_router)
 
 
 @app.middleware("http")
