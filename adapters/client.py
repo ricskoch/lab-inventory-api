@@ -42,11 +42,14 @@ class ApiClient:
         raise SystemExit(f"Device {name!r} is not registered. Ask an admin to POST /devices first.")
 
     def send_run(self, payload: dict) -> bool:
-        """True if delivered (or already known). False if spooled for later."""
+        return self.send("/runs", payload)
+
+    def send(self, path: str, payload: dict) -> bool:
+        """POST JSON. True if delivered (or already known). False if spooled for later."""
         try:
-            r = self.http.post("/runs", json=payload)
+            r = self.http.post(path, json=payload)
         except httpx.TransportError:
-            self._spool(payload)
+            self._spool(path, payload)
             return False
         if r.status_code in (200, 201):
             return True
@@ -54,14 +57,14 @@ class ApiClient:
             raise SystemExit(f"API refused our key ({r.status_code}). Check LAB_API_KEY / role; not retrying.")
         if r.status_code in (404, 422):
             # Our data is wrong (unknown barcode, bad payload); retrying won't help.
-            print(f"REJECTED {r.status_code}: {r.text} payload={payload}")
+            print(f"REJECTED {r.status_code}: {r.text} payload={str(payload)[:200]}")
             return True
-        self._spool(payload)  # 5xx etc.: try again later
+        self._spool(path, payload)  # 5xx etc.: try again later
         return False
 
-    def _spool(self, payload: dict) -> None:
+    def _spool(self, path: str, payload: dict) -> None:
         with self.spool.open("a") as f:
-            f.write(json.dumps(payload) + "\n")
+            f.write(json.dumps({"path": path, "payload": payload}) + "\n")
 
     def flush_spool(self) -> int:
         if not self.spool.exists():
@@ -70,6 +73,9 @@ class ApiClient:
         self.spool.unlink()
         sent = 0
         for line in lines:
-            if self.send_run(json.loads(line)):
+            item = json.loads(line)
+            if "path" not in item:  # spool files written before batch uploads existed held bare /runs payloads
+                item = {"path": "/runs", "payload": item}
+            if self.send(item["path"], item["payload"]):
                 sent += 1
         return sent
