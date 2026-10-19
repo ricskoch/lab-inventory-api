@@ -20,7 +20,19 @@ change data.
    A drug whose lowest viability stays above 70 % is reported `inactive`, not forced into a fit.
 3. **Z'** = 1 - 3 (sd_vehicle + sd_kill) / |mean_vehicle - mean_kill|. Above 0.5 is a good assay, below 0 means the controls overlap.
 
-## Run it on Windows (PowerShell, no git)
+## Quickest way: one command
+```
+py -m pip install -r requirements.txt -r requirements-dashboard.txt     (Windows PowerShell)
+py -m screening.demo
+```
+On Linux or Codespaces use `python` instead of `py`. Run it from the project folder (the one that contains `app` and `dashboard`).
+It makes a throwaway database and fresh keys in `demo_data/`, starts the API and the dashboard, runs a simulated week and prints
+the dashboard address. Open it and tick "Live view". Ctrl+C stops everything. Re-running starts from an empty database.
+In Codespaces open the Ports tab and click the globe next to the printed port.
+
+The manual steps below do the same thing in pieces, which is how you would run it against a real API.
+
+## Run it by hand on Windows (PowerShell, no git)
 Use **three PowerShell windows**, all in the project folder. Replace the `lab_...` values with your own keys.
 
 **Window 1: the API**
