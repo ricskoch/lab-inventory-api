@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
 import sqlite3 as _sqlite3
@@ -8,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 
 from .db import db_path, get_conn, init_db
 from .security import require
-from .models import Device, DeviceIn, Run, RunIn, Sample, SampleIn, SampleUpdate
+from .models import Device, DeviceIn, Run, RunDetail, RunIn, Sample, SampleIn, SampleUpdate
 
 
 @asynccontextmanager
@@ -177,3 +178,43 @@ def runs_for_sample(barcode: str, conn=Depends(get_conn)):
         "SELECT * FROM runs WHERE sample_id = ? ORDER BY measured_at, id", (sample["id"],)
     )
     return [_run(r) for r in rows]
+
+
+def _utc_stamp(value: str, name: str) -> str:
+    """Accepts '2026-10-19' or '2026-10-19T08:00:00Z' and returns the stored format."""
+    try:
+        dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(422, f"{name} must be an ISO date or datetime, e.g. 2026-10-19T08:00:00Z")
+    if dt.tzinfo:
+        dt = dt.astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+@app.get("/runs", response_model=list[RunDetail], dependencies=[Depends(require("admin", "reader"))])
+def list_runs(
+    device: str | None = Query(None, description="device name, e.g. plate-reader-1"),
+    sample: str | None = Query(None, description="sample barcode"),
+    since: str | None = Query(None, description="only runs measured at or after this time (UTC)"),
+    until: str | None = Query(None, description="only runs measured before this time (UTC)"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    conn=Depends(get_conn),
+):
+    """Cross-sample query for dashboards: newest first, filtered by device, sample and time."""
+    where, params = [], []
+    if device:
+        where.append("d.name = ?"); params.append(device)
+    if sample:
+        where.append("s.barcode = ?"); params.append(sample)
+    if since:
+        where.append("r.measured_at >= ?"); params.append(_utc_stamp(since, "since"))
+    if until:
+        where.append("r.measured_at < ?"); params.append(_utc_stamp(until, "until"))
+    sql = (
+        "SELECT r.id, s.barcode AS sample_barcode, d.name AS device_name, r.result, r.measured_at, r.external_id "
+        "FROM runs r JOIN samples s ON s.id = r.sample_id JOIN devices d ON d.id = r.device_id"
+        + (" WHERE " + " AND ".join(where) if where else "")  # only fixed fragments, values stay as ? params
+        + " ORDER BY r.measured_at DESC, r.id DESC LIMIT ? OFFSET ?"
+    )
+    return [_run(r) for r in conn.execute(sql, (*params, limit, offset))]

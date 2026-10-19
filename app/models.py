@@ -47,3 +47,13 @@ class Run(BaseModel):
     device_id: int
     result: dict[str, Any]
     measured_at: str
+
+
+class RunDetail(BaseModel):
+    """A run with names instead of IDs: what a dashboard wants to plot."""
+    id: int
+    sample_barcode: str
+    device_name: str
+    result: dict[str, Any]
+    measured_at: str
+    external_id: Optional[str] = None
