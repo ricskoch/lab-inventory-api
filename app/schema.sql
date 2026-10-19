@@ -29,3 +29,30 @@ CREATE TABLE IF NOT EXISTS runs (
     measured_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_runs_sample ON runs(sample_id);
+
+-- Security: who may call the API. Only a hash of each key is stored.
+CREATE TABLE IF NOT EXISTS api_keys (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,       -- e.g. 'plate-reader-1', 'richard'
+    role        TEXT NOT NULL CHECK (role IN ('admin','device','reader')),
+    key_hash    TEXT NOT NULL UNIQUE,
+    revoked     INTEGER NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+);
+
+-- Append-only record of who did what. Written for every change and every rejected request.
+CREATE TABLE IF NOT EXISTS audit_log (
+    id          INTEGER PRIMARY KEY,
+    ts          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')),
+    actor       TEXT,                       -- NULL when the key was missing/unknown
+    role        TEXT,
+    method      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    status      INTEGER NOT NULL,
+    client_ip   TEXT
+);
+-- Make the log tamper-resistant at the database level: no edits, no deletes.
+CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON audit_log
+BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON audit_log
+BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;

@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from .client import ApiClient
+from .client import ApiClient, from_env
 
 
 def parse_csv(path: Path) -> list[dict]:
@@ -46,7 +46,7 @@ def watch(folder: Path, client: ApiClient, device_id: int, interval: float = 2.0
 if __name__ == "__main__":
     folder = Path(sys.argv[1] if len(sys.argv) > 1 else "plate_reader_out")
     folder.mkdir(exist_ok=True)
-    c = ApiClient("http://127.0.0.1:8000", spool=folder / "spool.jsonl")
-    dev = c.ensure_device("plate-reader-1", "plate_reader", "Bench 2")
+    c = from_env(spool=folder / "spool.jsonl")
+    dev = c.device_id("plate-reader-1")
     print("watching", folder)
     watch(folder, c, dev)

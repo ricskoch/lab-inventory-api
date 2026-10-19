@@ -1,0 +1,8 @@
+.git
+certs/
+*.db
+__pycache__/
+tests/
+simulators/
+adapters/
+docs/

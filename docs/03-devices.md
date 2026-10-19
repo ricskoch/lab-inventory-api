@@ -37,8 +37,8 @@ Parse -> build `{sample_barcode, device_id, result, external_id}` -> `client.sen
 replace the socket with `serial.Serial(port).readline()`. For a vendor SDK, call it inside the loop. For
 SiLA 2/OPC UA use their client libraries. The rest (spool, retry, idempotency) is shared in `adapters/client.py`.
 
-## What's missing (step 4)
-Anyone on the network can currently POST. Step 4 adds per-device credentials, roles, audit log, HTTPS, Docker.
+## Security
+Adapters authenticate with a `device` API key (`LAB_API_KEY`) and an admin registers each device first. See `docs/04-security.md`. The commands above need the env vars from that document.
 
 Note: `external_id` was added to the `runs` table. There is no migration tooling yet, so delete any existing
 `lab.db` and restart. Real data would need an Alembic migration.

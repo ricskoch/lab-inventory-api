@@ -7,7 +7,7 @@ import socket
 import sys
 import time
 
-from .client import ApiClient
+from .client import ApiClient, from_env
 
 
 def parse_line(line: str, seq: int, device_name: str) -> dict:
@@ -40,6 +40,6 @@ def run(host: str, port: int, client: ApiClient, device_id: int, device_name: st
 if __name__ == "__main__":
     host = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
     port = int(sys.argv[2]) if len(sys.argv) > 2 else 9100
-    c = ApiClient("http://127.0.0.1:8000", spool="balance_spool.jsonl")
-    dev = c.ensure_device("balance-1", "balance", "Bench 1")
+    c = from_env(spool="balance_spool.jsonl")
+    dev = c.device_id("balance-1")
     run(host, port, c, dev, "balance-1")

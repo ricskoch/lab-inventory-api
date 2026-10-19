@@ -6,9 +6,25 @@ Two jobs that every adapter needs:
    re-sent later. A lab device measurement can't be repeated, so never drop one.
 """
 import json
+import os
 from pathlib import Path
 
 import httpx
+
+
+def from_env(spool: Path) -> "ApiClient":
+    """Config via environment so secrets never sit in code or on the command line.
+
+    LAB_API_URL (e.g. https://lab-api.local:8443), LAB_API_KEY (a 'device' key),
+    LAB_CA_CERT (path to the lab CA certificate; leave unset if the cert is publicly trusted).
+    """
+    http = httpx.Client(
+        base_url=os.environ.get("LAB_API_URL", "http://127.0.0.1:8000"),
+        headers={"X-API-Key": os.environ["LAB_API_KEY"]},
+        verify=os.environ.get("LAB_CA_CERT") or True,
+        timeout=5,
+    )
+    return ApiClient("", spool=spool, http=http)
 
 
 class ApiClient:
@@ -16,20 +32,14 @@ class ApiClient:
         self.http = http or httpx.Client(base_url=base_url, timeout=5)
         self.spool = Path(spool)
 
-    def ensure_device(self, name: str, kind: str, location: str | None = None) -> int:
+    def device_id(self, name: str) -> int:
+        """Devices are registered by an admin; a device key may only look itself up."""
         r = self.http.get("/devices")
         r.raise_for_status()
         for d in r.json():
             if d["name"] == name:
                 return d["id"]
-        r = self.http.post("/devices", json={"name": name, "kind": kind, "location": location})
-        r.raise_for_status()
-        return r.json()["id"]
-
-    def ensure_sample(self, barcode: str) -> None:
-        """Dev convenience for the simulators. Real setups register samples via the LIMS/ELN."""
-        if self.http.get(f"/samples/{barcode}").status_code == 404:
-            self.http.post("/samples", json={"barcode": barcode, "name": f"Sample {barcode}"})
+        raise SystemExit(f"Device {name!r} is not registered. Ask an admin to POST /devices first.")
 
     def send_run(self, payload: dict) -> bool:
         """True if delivered (or already known). False if spooled for later."""
@@ -40,6 +50,8 @@ class ApiClient:
             return False
         if r.status_code in (200, 201):
             return True
+        if r.status_code in (401, 403):
+            raise SystemExit(f"API refused our key ({r.status_code}). Check LAB_API_KEY / role; not retrying.")
         if r.status_code in (404, 422):
             # Our data is wrong (unknown barcode, bad payload); retrying won't help.
             print(f"REJECTED {r.status_code}: {r.text} payload={payload}")
