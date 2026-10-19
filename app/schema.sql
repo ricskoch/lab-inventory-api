@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS runs (
     sample_id   INTEGER NOT NULL REFERENCES samples(id) ON DELETE RESTRICT,
     device_id   INTEGER NOT NULL REFERENCES devices(id) ON DELETE RESTRICT,
     result      TEXT NOT NULL,              -- JSON payload from the device
+    external_id TEXT UNIQUE,                -- adapter-supplied ID; makes retries idempotent
     measured_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 CREATE INDEX IF NOT EXISTS idx_runs_sample ON runs(sample_id);

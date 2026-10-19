@@ -37,10 +37,12 @@ class RunIn(BaseModel):
     sample_barcode: str
     device_id: int
     result: dict[str, Any]
+    external_id: Optional[str] = Field(default=None, max_length=200)
 
 
 class Run(BaseModel):
     id: int
+    external_id: Optional[str] = None
     sample_id: int
     device_id: int
     result: dict[str, Any]

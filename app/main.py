@@ -111,15 +111,22 @@ def _run(row) -> dict:
 
 
 @app.post("/runs", response_model=Run, status_code=201)
-def create_run(body: RunIn, conn=Depends(get_conn)):
+def create_run(body: RunIn, response: Response, conn=Depends(get_conn)):
+    # Idempotency: an adapter that retries after a timeout sends the same external_id.
+    # We return the existing run (200) instead of creating a duplicate measurement.
+    if body.external_id:
+        existing = _row(conn, "SELECT * FROM runs WHERE external_id = ?", (body.external_id,))
+        if existing:
+            response.status_code = 200
+            return _run(existing)
     sample = _row(conn, "SELECT id FROM samples WHERE barcode = ?", (body.sample_barcode,))
     if not sample:
         raise HTTPException(404, f"Unknown sample barcode {body.sample_barcode!r}")
     if not _row(conn, "SELECT 1 FROM devices WHERE id = ?", (body.device_id,)):
         raise HTTPException(404, "Unknown device")
     cur = conn.execute(
-        "INSERT INTO runs (sample_id, device_id, result) VALUES (?, ?, ?)",
-        (sample["id"], body.device_id, json.dumps(body.result)),
+        "INSERT INTO runs (sample_id, device_id, result, external_id) VALUES (?, ?, ?, ?)",
+        (sample["id"], body.device_id, json.dumps(body.result), body.external_id),
     )
     return _run(_row(conn, "SELECT * FROM runs WHERE id = ?", (cur.lastrowid,)))
 

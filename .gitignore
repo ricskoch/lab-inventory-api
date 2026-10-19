@@ -2,3 +2,6 @@ __pycache__/
 *.db
 .pytest_cache/
 .venv/
+spool.jsonl
+*_spool.jsonl
+plate_reader_out/
