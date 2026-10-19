@@ -1,16 +1,3 @@
-import pytest
-from fastapi.testclient import TestClient
-
-
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setenv("LAB_DB", str(tmp_path / "test.db"))
-    from app.main import app
-
-    with TestClient(app) as c:
-        yield c
-
-
 def _sample(client, barcode="S-001"):
     return client.post("/samples", json={"barcode": barcode, "name": "Lysate A"})
 

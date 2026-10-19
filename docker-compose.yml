@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8443:8443"          # reachable from the lab network: https://<this-machine>:8443
+    volumes:
+      - lab-data:/data       # database survives container rebuilds
+      - ./certs:/certs:ro    # server.crt/server.key from deploy/make_certs.sh
+    restart: unless-stopped
+volumes:
+  lab-data:

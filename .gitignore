@@ -5,3 +5,4 @@ __pycache__/
 spool.jsonl
 *_spool.jsonl
 plate_reader_out/
+certs/

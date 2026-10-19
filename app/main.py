@@ -2,9 +2,12 @@ import json
 import sqlite3
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response
+import sqlite3 as _sqlite3
 
-from .db import get_conn, init_db
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+
+from .db import db_path, get_conn, init_db
+from .security import require
 from .models import Device, DeviceIn, Run, RunIn, Sample, SampleIn, SampleUpdate
 
 
@@ -17,13 +20,47 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Lab Inventory API", version="0.1.0", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def audit(request: Request, call_next):
+    """Record every change (non-GET) and every rejected request (401/403)."""
+    response = await call_next(request)
+    if request.method != "GET" or response.status_code in (401, 403):
+        # Blocking SQLite call inside async code is fine at lab scale; use a queue/thread at scale.
+        conn = _sqlite3.connect(db_path())
+        conn.execute(
+            "INSERT INTO audit_log (actor, role, method, path, status, client_ip) VALUES (?,?,?,?,?,?)",
+            (
+                getattr(request.state, "actor", None),
+                getattr(request.state, "role", None),
+                request.method,
+                request.url.path,
+                response.status_code,
+                request.client.host if request.client else None,
+            ),
+        )
+        conn.commit()
+        conn.close()
+    return response
+
+
+@app.get("/health")
+def health():
+    """Unauthenticated on purpose: load balancers and Docker health checks need it. Reveals nothing."""
+    return {"status": "ok"}
+
+
+@app.get("/audit", dependencies=[Depends(require("admin"))])
+def audit_log(limit: int = Query(100, ge=1, le=1000), conn=Depends(get_conn)):
+    return [dict(r) for r in conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,))]
+
+
 def _row(conn, sql, params=()):
     return conn.execute(sql, params).fetchone()
 
 
 # ---------- samples ----------
 
-@app.post("/samples", response_model=Sample, status_code=201)
+@app.post("/samples", response_model=Sample, status_code=201, dependencies=[Depends(require("admin"))])
 def create_sample(body: SampleIn, conn=Depends(get_conn)):
     try:
         cur = conn.execute(
@@ -35,7 +72,7 @@ def create_sample(body: SampleIn, conn=Depends(get_conn)):
     return dict(_row(conn, "SELECT * FROM samples WHERE id = ?", (cur.lastrowid,)))
 
 
-@app.get("/samples", response_model=list[Sample])
+@app.get("/samples", response_model=list[Sample], dependencies=[Depends(require("admin","reader"))])
 def list_samples(
     status: str | None = None,
     limit: int = Query(50, ge=1, le=500),
@@ -50,7 +87,7 @@ def list_samples(
     return [dict(r) for r in conn.execute(sql, (*params, limit, offset))]
 
 
-@app.get("/samples/{barcode}", response_model=Sample)
+@app.get("/samples/{barcode}", response_model=Sample, dependencies=[Depends(require("admin","reader"))])
 def get_sample(barcode: str, conn=Depends(get_conn)):
     row = _row(conn, "SELECT * FROM samples WHERE barcode = ?", (barcode,))
     if not row:
@@ -58,7 +95,7 @@ def get_sample(barcode: str, conn=Depends(get_conn)):
     return dict(row)
 
 
-@app.patch("/samples/{barcode}", response_model=Sample)
+@app.patch("/samples/{barcode}", response_model=Sample, dependencies=[Depends(require("admin"))])
 def update_sample(barcode: str, body: SampleUpdate, conn=Depends(get_conn)):
     changes = body.model_dump(exclude_unset=True)
     if changes:
@@ -72,7 +109,7 @@ def update_sample(barcode: str, body: SampleUpdate, conn=Depends(get_conn)):
     return get_sample(barcode, conn)
 
 
-@app.delete("/samples/{barcode}", status_code=204)
+@app.delete("/samples/{barcode}", status_code=204, dependencies=[Depends(require("admin"))])
 def delete_sample(barcode: str, conn=Depends(get_conn)):
     try:
         cur = conn.execute("DELETE FROM samples WHERE barcode = ?", (barcode,))
@@ -85,7 +122,7 @@ def delete_sample(barcode: str, conn=Depends(get_conn)):
 
 # ---------- devices ----------
 
-@app.post("/devices", response_model=Device, status_code=201)
+@app.post("/devices", response_model=Device, status_code=201, dependencies=[Depends(require("admin"))])
 def create_device(body: DeviceIn, conn=Depends(get_conn)):
     try:
         cur = conn.execute(
@@ -97,7 +134,7 @@ def create_device(body: DeviceIn, conn=Depends(get_conn)):
     return dict(_row(conn, "SELECT * FROM devices WHERE id = ?", (cur.lastrowid,)))
 
 
-@app.get("/devices", response_model=list[Device])
+@app.get("/devices", response_model=list[Device], dependencies=[Depends(require("admin","reader","device"))])
 def list_devices(conn=Depends(get_conn)):
     return [dict(r) for r in conn.execute("SELECT * FROM devices ORDER BY id")]
 
@@ -110,7 +147,7 @@ def _run(row) -> dict:
     return d
 
 
-@app.post("/runs", response_model=Run, status_code=201)
+@app.post("/runs", response_model=Run, status_code=201, dependencies=[Depends(require("admin","device"))])
 def create_run(body: RunIn, response: Response, conn=Depends(get_conn)):
     # Idempotency: an adapter that retries after a timeout sends the same external_id.
     # We return the existing run (200) instead of creating a duplicate measurement.
@@ -131,7 +168,7 @@ def create_run(body: RunIn, response: Response, conn=Depends(get_conn)):
     return _run(_row(conn, "SELECT * FROM runs WHERE id = ?", (cur.lastrowid,)))
 
 
-@app.get("/samples/{barcode}/runs", response_model=list[Run])
+@app.get("/samples/{barcode}/runs", response_model=list[Run], dependencies=[Depends(require("admin","reader"))])
 def runs_for_sample(barcode: str, conn=Depends(get_conn)):
     sample = _row(conn, "SELECT id FROM samples WHERE barcode = ?", (barcode,))
     if not sample:
