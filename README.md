@@ -20,6 +20,7 @@ pytest -q
 ## Layout
 - `app/schema.sql`: the data model, in plain SQL
 - `app/security.py`, `app/keys.py`: API keys, roles, key CLI
+- `app/plates.py`: plates, wells, bulk readings, workflow events (see `docs/06-plates.md`)
 - `deploy/`, `Dockerfile`, `docker-compose.yml`: certificates and LAN deployment
 - `app/db.py`: connection per request (a FastAPI dependency)
 - `app/models.py`: request/response shapes + validation (Pydantic)
