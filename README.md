@@ -20,7 +20,8 @@ pytest -q
 - `app/db.py`: connection per request (a FastAPI dependency)
 - `app/models.py`: request/response shapes + validation (Pydantic)
 - `app/main.py`: endpoints
-- `tests/`: tests incl. a SQL-injection check
+- `adapters/`: device adapters + shared client (retry, spool); `simulators/`: fake devices (see `docs/03-devices.md`)
+- `tests/`: API, adapter and SQL-injection tests
 
 ## How a request flows
 1. Client sends `POST /samples` with JSON.
@@ -31,4 +32,4 @@ pytest -q
 ## How to expand
 - New resource: add a table to `schema.sql`, models to `models.py`, endpoints to `main.py`, tests.
 - Changing the schema later: move to migrations (Alembic) once data matters.
-- Roadmap: device adapters (step 3), auth/roles/audit/HTTPS/Docker (step 4), plates resource.
+- Roadmap: auth/roles/audit/HTTPS/Docker (step 4), plates resource.
